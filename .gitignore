@@ -1,0 +1,28 @@
+# Local configuration and credentials
+config.yaml
+.env
+.env.*
+!.env.example
+secrets/
+token.txt
+tunnel.url
+
+# Runtime state and private prompt data
+state/
+captures/
+bodies/
+logs/
+*.pid
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Editors and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

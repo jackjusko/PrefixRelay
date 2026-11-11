@@ -1,0 +1,60 @@
+# Copy to config.yaml with `python scripts/setup.py`, then edit routes/models.
+host: 127.0.0.1
+port: 8081
+mode: stabilize
+
+default_model: openrouter-default
+
+backends:
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    usage_style: usage_object
+    stabilize: true
+    compact_enabled: true
+    # Routes below provide per-model context_tokens.
+    extra_headers:
+      HTTP-Referer: http://localhost
+      X-Title: PrefixRelay
+
+  # Example local OpenAI-compatible server (llama.cpp, vLLM, Ollama's
+  # OpenAI-compatible endpoint, LM Studio, etc.). Enable/edit as needed.
+  local:
+    base_url: http://127.0.0.1:1234/v1
+    api_key_env: LOCAL_MODEL_API_KEY
+    # For llama.cpp /props is used when context_tokens is 0.
+    stabilize: true
+    compact_enabled: true
+
+routes:
+  - name: openrouter-default
+    backend: openrouter
+    upstream_model: openai/gpt-4o-mini
+    context_tokens: 128000
+  - name: local-model
+    backend: local
+    upstream_model: your-local-model-id
+    # Set your model's context size, or leave 0 for supported local discovery.
+    context_tokens: 0
+
+aliases:
+  gpt-4o-mini: openrouter-default
+
+# This is the key Cursor sends to PrefixRelay. `python scripts/setup.py`
+# generates secrets/proxy.token. Provider keys are configured separately above.
+token_file: secrets/proxy.token
+enforce_auth: true
+learn_first_key: false
+force_usage_in_stream: true
+
+# Prompt and completion bodies are never written unless record_bodies is true.
+record_bodies: false
+log_response_bodies: false
+response_body_cap: 2000000
+
+captures_dir: captures
+bodies_dir: bodies
+state_dir: state
+
+stream_reasoning_to_client: true
+stream_reasoning_as_think_tags: false
