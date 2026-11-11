@@ -8,7 +8,7 @@ length.
 ```text
 Cursor ── model name + conversation ──▶ PrefixRelay
                                           ├─ stabilize the cached prefix
-                                          ├─ route to the selected backend
+                                          ├─ route to a backend or replica pool
                                           └─ compact before the model's CTX limit
                                                      │
                                                      ├── OpenRouter
@@ -26,7 +26,7 @@ model's context limit. PrefixRelay adds those controls in one local proxy.
 | Capability | Plain compatible endpoint | PrefixRelay |
 |---|---|---|
 | KV-cache safety | Depends on the client and server receiving a stable prefix | Keeps a canonical conversation prefix and restores earlier image content when Cursor changes it |
-| Model routing | Often configured for one endpoint/model at a time | Routes Cursor-visible model names and aliases to different backends and upstream model IDs |
+| Model routing | Often configured for one endpoint/model at a time | Routes Cursor-visible model names and aliases to backends, upstream IDs, or a pool of replicas |
 | Context limits | Usually the caller must fit the request to the model window | Uses each route's CTX limit to decide when to elide old tool output and summarize older history |
 | Credentials | A key is usually configured for the endpoint | Keeps a separate key source for each backend and a separate key for Cursor-to-proxy access |
 | Cursor setup | You supply a compatible URL | Includes setup steps and a Cloudflare Quick Tunnel helper for temporary HTTPS access |
@@ -56,6 +56,42 @@ provider keys into Cursor.
 
 Unknown model names use the configured `default_model` route. Choose that
 default deliberately: it determines where unrecognized names go.
+
+#### One Cursor model name, several endpoints
+
+A backend can also represent a pool of replicas. Cursor still selects a single
+model name, such as `minion`; PrefixRelay then chooses among that backend's
+endpoints. For each request, it prefers a healthy, available replica whose
+recorded message history has the longest exact prefix in common with the
+incoming conversation. This sends continuing sessions back to the endpoint
+most likely to have their prompt prefix cached. If there's no history match,
+the least-recently-used replica gets the new session; that spreads fresh work
+across the pool. If all replicas are busy, requests wait; if none pass the
+health check, PrefixRelay returns `503`.
+
+```yaml
+backends:
+  minion-pool:
+    base_url: http://127.0.0.1:9010
+    replicas:
+      - {base_url: http://127.0.0.1:9010, model: minion-1}
+      - {base_url: http://127.0.0.1:9011, model: minion-2}
+      - {base_url: http://127.0.0.1:9012, model: minion-3}
+    stabilize: true
+    compact_enabled: true
+
+routes:
+  - name: minion
+    backend: minion-pool
+    context_tokens: 131072
+```
+
+Each replica should serve the same model capability and context size, expose
+`/health` for health checks, and provide OpenAI-compatible
+`/v1/chat/completions`. PrefixRelay sends the replica's configured `model` ID
+upstream. This is intended for separate model servers with independent KV
+caches; the pool uses conversation-prefix overlap to steer requests toward the
+cache that is most likely to be warm.
 
 ### 3. Compact history using the model's CTX length
 
